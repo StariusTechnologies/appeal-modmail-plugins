@@ -27,12 +27,12 @@ class Questions(commands.Cog):
         self.db = self.bot.plugin_db.get_partition(self)
 
     async def wait_for_channel_response(self, channel: discord.TextChannel,
-                                        member: discord.Member, *, timeout: int = 15) -> discord.Message:
+                                        member: discord.Member, *, timeout: int = 30) -> discord.Message:
         return await self.bot.wait_for('message',
                                        check=lambda m: m.channel == channel and m.author == member,
                                        timeout=timeout)
 
-    async def wait_for_dm_response(self, user: discord.User, *, timeout: int = 15) -> discord.Message:
+    async def wait_for_dm_response(self, user: discord.User, *, timeout: int = 30) -> discord.Message:
         return await self.bot.wait_for('message',
                                        check=lambda m: isinstance(m.channel, discord.DMChannel) and m.author == user,
                                        timeout=timeout)
@@ -78,9 +78,10 @@ class Questions(commands.Cog):
         embed.set_author(name=m.author.name, icon_url=m.author.avatar.url)
         message = await thread.channel.send(embed=embed)
         await message.pin()
-        q_message.content = 'Your appeal will now be reviewed by our moderation team. ' \
-                            'If you have new information to share about this case, please reply to this message.'
-        await thread.reply(q_message)
+
+        if config.get('outro'):  # no outro set up
+            q_message.content = config.get('outro')
+            await thread.reply(q_message)
 
         move_to = self.bot.get_channel(int(config['move_to']))
         if move_to is None:
@@ -121,6 +122,22 @@ class Questions(commands.Cog):
                                           {'$set': {'questions': questions, 'move_to': str(move_to.id)}}, upsert=True)
         await ctx.send('Saved')
 
+    @checks.has_permissions(PermissionLevel.MODERATOR)
+    @commands.command()
+    async def configoutro(self, ctx, *, move_to: CategoryChannel):
+        "Configures the outro."
+        await ctx.send('Type the outro you want')
+        try:
+            m = await self.wait_for_channel_response(ctx.channel, ctx.author)
+        except asyncio.TimeoutError:
+            return await ctx.send('Timed out.')
+        if not m.content:
+            return await ctx.send('Outro must be text-only.')
+        outro = m.content
+
+        await self.db.find_one_and_update({'_id': 'config'},
+                                          {'$set': {'outro': outro, 'move_to': str(move_to.id)}}, upsert=True)
+        await ctx.send('Saved')
 
 async def setup(bot: ModmailBot) -> None:
     await bot.add_cog(Questions(bot))
