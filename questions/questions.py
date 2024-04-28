@@ -27,12 +27,12 @@ class Questions(commands.Cog):
         self.db = self.bot.plugin_db.get_partition(self)
 
     async def wait_for_channel_response(self, channel: discord.TextChannel,
-                                        member: discord.Member, *, timeout: int = 30) -> discord.Message:
+                                        member: discord.Member, *, timeout: int = 1800) -> discord.Message:
         return await self.bot.wait_for('message',
                                        check=lambda m: m.channel == channel and m.author == member,
                                        timeout=timeout)
 
-    async def wait_for_dm_response(self, user: discord.User, *, timeout: int = 30) -> discord.Message:
+    async def wait_for_dm_response(self, user: discord.User, *, timeout: int = 1800) -> discord.Message:
         return await self.bot.wait_for('message',
                                        check=lambda m: isinstance(m.channel, discord.DMChannel) and m.author == user,
                                        timeout=timeout)
@@ -45,6 +45,7 @@ class Questions(commands.Cog):
         """Sends out menu to user"""
         config = await self.db.find_one({'_id': 'config'}) or {}
         responses = {}
+
         if not config.get('questions'):  # no questions set up
             return
 
@@ -52,12 +53,16 @@ class Questions(commands.Cog):
         q_message.author = self.bot.modmail_guild.me
         m = None
 
+        if config.get('intro'):  # no intro set up
+            q_message.content = config.get('intro')
+            await thread.reply(q_message)
+
         for question in config['questions']:
             q_message.content = question
             await thread.reply(q_message)
 
             try:
-                m = await self.wait_for_dm_response(thread.recipient, timeout=900)  # 15m
+                m = await self.wait_for_dm_response(thread.recipient, timeout=1800)  # 30m
             except asyncio.TimeoutError:
                 await thread.close(closer=self.bot.modmail_guild.me,
                                    message='Closed due to inactivity and not responding to questions.')
@@ -137,6 +142,23 @@ class Questions(commands.Cog):
 
         await self.db.find_one_and_update({'_id': 'config'},
                                           {'$set': {'outro': outro, 'move_to': str(move_to.id)}}, upsert=True)
+        await ctx.send('Saved')
+
+    @checks.has_permissions(PermissionLevel.MODERATOR)
+    @commands.command()
+    async def configintro(self, ctx, *, move_to: CategoryChannel):
+        "Configures the intro."
+        await ctx.send('Type the intro you want')
+        try:
+            m = await self.wait_for_channel_response(ctx.channel, ctx.author)
+        except asyncio.TimeoutError:
+            return await ctx.send('Timed out.')
+        if not m.content:
+            return await ctx.send('Intro must be text-only.')
+        intro = m.content
+
+        await self.db.find_one_and_update({'_id': 'config'},
+                                          {'$set': {'intro': intro, 'move_to': str(move_to.id)}}, upsert=True)
         await ctx.send('Saved')
 
 async def setup(bot: ModmailBot) -> None:
