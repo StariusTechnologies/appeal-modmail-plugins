@@ -80,7 +80,7 @@ class Questions(commands.Cog):
         embed = discord.Embed(color=self.bot.main_color, timestamp=datetime.utcnow())
         for k, v in responses.items():
             embed.add_field(name=k, value=v, inline=False)
-        embed.set_author(name=m.author.name, icon_url=m.author.avatar.url)
+        embed.set_author(name=m.author.name, icon_url=m.author.get("avatar", {}).url)
         message = await thread.channel.send(embed=embed)
         await message.pin()
 
